@@ -3,16 +3,16 @@ package zdata
 // PlayerData holds information about a player state
 // like resources and units.
 type PlayerData struct {
-	ID         int
-	BaseHealth int
-	Minerals   int
-	Gas        int
-	Units      map[string]int
+	ID              int
+	BaseHealth      int
+	Minerals        int
+	Gas             int
+	Units           map[string]int
+	IncomingAttacks []AttackData
 }
 
 // AttackData holds information about an incoming attack.
 type AttackData struct {
-	DefenderID int
 	AttackerID int
 	Units      map[string]int
 }

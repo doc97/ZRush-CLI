@@ -8,30 +8,29 @@ import (
 )
 
 // StepAttack performs the attack step
-func StepAttack(player *zdata.PlayerData, playerCount int, units map[string]zdata.UnitData) (*zdata.AttackData, error) {
+func StepAttack(player *zdata.PlayerData, players []zdata.PlayerData, units map[string]zdata.UnitData) error {
 	if player.Units[zdata.Zergling] == 0 && player.Units[zdata.Hydralisk] == 0 && player.Units[zdata.Mutalisk] == 0 {
-		return nil, nil
+		return nil
 	}
 
-	subStepPrintAttackUnits(player, units)
+	printAttackUnits(player, units)
 
-	attackUnits, err := subStepSelectAttackUnits(player)
+	attackUnits, err := selectAttackUnits(player)
 	if err != nil {
-		return nil, fmt.Errorf("failed to select units: %v", err)
+		return fmt.Errorf("failed to select units: %v", err)
 	}
 
-	targetPlayer := subStepSelectAttackTarget(playerCount, player.ID)
+	targetPlayer := selectAttackTarget(players, player.ID)
 	attack := zdata.AttackData{
 		AttackerID: player.ID,
-		DefenderID: targetPlayer,
 		Units:      attackUnits,
 	}
-
+	targetPlayer.IncomingAttacks = append(targetPlayer.IncomingAttacks, attack)
 	fmt.Println()
-	return &attack, nil
+	return nil
 }
 
-func subStepPrintAttackUnits(player *zdata.PlayerData, units map[string]zdata.UnitData) {
+func printAttackUnits(player *zdata.PlayerData, units map[string]zdata.UnitData) {
 	fmt.Println("Available offensive units:")
 
 	nonAttackUnits := map[string]struct{}{zdata.Drone: {}, zdata.SporeCrawler: {}}
@@ -48,7 +47,7 @@ func subStepPrintAttackUnits(player *zdata.PlayerData, units map[string]zdata.Un
 	}
 }
 
-func subStepSelectAttackUnits(player *zdata.PlayerData) (map[string]int, error) {
+func selectAttackUnits(player *zdata.PlayerData) (map[string]int, error) {
 	fmt.Printf("\nAttack with (format: 'zzh')? ")
 	units, _, err := zutil.ReadUnitString()
 	if err != nil {
@@ -60,8 +59,8 @@ func subStepSelectAttackUnits(player *zdata.PlayerData) (map[string]int, error) 
 	return units, nil
 }
 
-func subStepSelectAttackTarget(playerCount, selfID int) int {
-	targetPlayer := -1
+func selectAttackTarget(players []zdata.PlayerData, selfID int) zdata.PlayerData {
+	playerCount := len(players)
 	for {
 		fmt.Printf("Attack player [1-%d]? ", playerCount)
 		var target int
@@ -71,8 +70,6 @@ func subStepSelectAttackTarget(playerCount, selfID int) int {
 		if target == selfID || target < 1 || target > playerCount {
 			continue
 		}
-		targetPlayer = target
-		break
+		return players[target-1]
 	}
-	return targetPlayer
 }

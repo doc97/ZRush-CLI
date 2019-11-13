@@ -89,27 +89,17 @@ func run(players []zdata.PlayerData, units map[string]zdata.UnitData) (int, erro
 			return -1, err
 		}
 
-		attack, err := zsteps.StepAttack(player, len(players), units)
+		if err := zsteps.StepDefend(players, units); err != nil {
+			return -1, err
+		}
+
+		err := zsteps.StepAttack(player, len(players), units)
 		if err != nil {
 			return -1, err
 		}
 
-		subStepPerformAttack(attack, players, units)
-
 		pIdx = (pIdx + 1) % len(players)
 	}
-}
-
-func subStepPerformAttack(attack *zdata.AttackData, players []zdata.PlayerData, units map[string]zdata.UnitData) {
-	if attack == nil {
-		return
-	}
-	dmg := 0
-	for name, count := range attack.Units {
-		dmg += count * units[name].Attack
-	}
-	fmt.Printf("Attacking player '%d' with %d damage...\n", attack.DefenderID, dmg)
-	players[attack.DefenderID-1].BaseHealth -= dmg
 }
 
 func main() {
