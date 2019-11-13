@@ -11,7 +11,7 @@ import (
 func StepMorph(player *zdata.PlayerData, units map[string]zdata.UnitData) error {
 	for {
 		// Exit condition
-		if !subStepPrintAffordableUnits(player, units) {
+		if !checkAffordableUnits(player, units) {
 			fmt.Printf("Morphing units...\n\n")
 			return nil
 		}
@@ -45,7 +45,7 @@ func StepMorph(player *zdata.PlayerData, units map[string]zdata.UnitData) error 
 	}
 }
 
-func subStepPrintAffordableUnits(player *zdata.PlayerData, units map[string]zdata.UnitData) bool {
+func checkAffordableUnits(player *zdata.PlayerData, units map[string]zdata.UnitData) bool {
 	affordableUnits := make(map[string]zdata.UnitData)
 	for name, unit := range units {
 		if player.Minerals >= unit.Minerals && player.Gas >= unit.Gas {
