@@ -13,24 +13,18 @@ import (
 // PlayerData holds information about a player state
 // like resources and units.
 type PlayerData struct {
-	ID            int
-	baseHealth    int
-	minerals      int
-	gas           int
-	drones        int
-	zerglings     int
-	hydralisks    int
-	mutalisks     int
-	sporeCrawlers int
+	ID         int
+	baseHealth int
+	minerals   int
+	gas        int
+	units      map[string]int
 }
 
 // AttackData holds information about an incoming attack.
 type AttackData struct {
 	defenderID int
 	attackerID int
-	zerglings  int
-	hydralisks int
-	mutalisks  int
+	units      map[string]int
 }
 
 // UnitData holds information about a unit.
@@ -41,6 +35,21 @@ type UnitData struct {
 	minerals int
 	gas      int
 }
+
+// Drone is the key for Drone units
+const Drone = "D"
+
+// Zergling is the key for Zergling units
+const Zergling = "z"
+
+// Hydralisk is the key for Hydralisk units
+const Hydralisk = "H"
+
+// Mutalisk is the key for Mutalisk units
+const Mutalisk = "M"
+
+// SporeCrawler is the key for Spore Crawler units
+const SporeCrawler = "SC"
 
 func printBanner() {
 	fmt.Println("=== ZRush ===")
@@ -65,20 +74,39 @@ func initialize() ([]PlayerData, map[string]UnitData, error) {
 
 	var players []PlayerData
 	for id := 1; id <= playerCount; id++ {
-		players = append(players, PlayerData{id, 20, 0, 0, 2, 0, 0, 0, 0})
+		players = append(players, PlayerData{
+			ID:         id,
+			baseHealth: 20,
+			minerals:   0,
+			gas:        0,
+			units: map[string]int{
+				Drone:        2,
+				Zergling:     0,
+				Hydralisk:    0,
+				Mutalisk:     0,
+				SporeCrawler: 0,
+			},
+		})
 	}
 
 	units := map[string]UnitData{
-		"Drone":         UnitData{name: "Drone", attack: 0, defense: 3, minerals: 1, gas: 0},
-		"Zergling":      UnitData{name: "Zergling", attack: 2, defense: 1, minerals: 1, gas: 0},
-		"Hydralisk":     UnitData{name: "Hydralisk", attack: 2, defense: 3, minerals: 3, gas: 1},
-		"Mutalisk":      UnitData{name: "Mutalisk", attack: 2, defense: 1, minerals: 2, gas: 2},
-		"Spore Crawler": UnitData{name: "Spore Crawler", attack: 0, defense: 1, minerals: 1, gas: 1},
+		Drone:        UnitData{name: "Drone", attack: 0, defense: 3, minerals: 1, gas: 0},
+		Zergling:     UnitData{name: "Zergling", attack: 2, defense: 1, minerals: 1, gas: 0},
+		Hydralisk:    UnitData{name: "Hydralisk", attack: 2, defense: 3, minerals: 3, gas: 1},
+		Mutalisk:     UnitData{name: "Mutalisk", attack: 2, defense: 1, minerals: 2, gas: 2},
+		SporeCrawler: UnitData{name: "Spore Crawler", attack: 0, defense: 1, minerals: 1, gas: 1},
 	}
 	return players, units, nil
 }
 
 func run(players []PlayerData, units map[string]UnitData) (int, error) {
+	i := 0
+	unitKeys := make([]string, len(units))
+	for k := range units {
+		unitKeys[i] = k
+		i++
+	}
+
 	pIdx, round := 0, 0
 	for {
 		if pIdx == 0 {
@@ -100,13 +128,16 @@ func run(players []PlayerData, units map[string]UnitData) (int, error) {
 			return -1, err
 		}
 
-		attack, err := stepAttack(player, len(players))
+		attack, err := stepAttack(player, len(players), units)
 		if err != nil {
 			return -1, err
 		}
 
 		if attack != nil {
-			dmg := attack.zerglings*units["Zergling"].attack + attack.hydralisks*units["Hydralisk"].attack + attack.mutalisks*units["Mutalisk"].attack
+			dmg := 0
+			for name, count := range attack.units {
+				dmg += count * units[name].attack
+			}
 			fmt.Printf("Attacking player '%d' with %d damage...\n", attack.defenderID, dmg)
 			players[attack.defenderID-1].baseHealth -= dmg
 		}
@@ -116,7 +147,7 @@ func run(players []PlayerData, units map[string]UnitData) (int, error) {
 }
 
 func stepResources(player *PlayerData) error {
-	slots, err := subStepSelectResourceSlots(player.drones)
+	slots, err := subStepSelectResourceSlots(player.units[Drone])
 	if err != nil {
 		return err
 	}
@@ -133,60 +164,49 @@ func stepEvolve(player *PlayerData) {
 
 func stepMorph(player *PlayerData, units map[string]UnitData) error {
 	for {
+		// Exit condition
 		if !subStepPrintAffordableUnits(player, units) {
+			fmt.Printf("Morphing units...\n\n")
 			return nil
 		}
 
 		fmt.Printf("\nMorph a unit, 'x' to skip [d,z,h,m,s]? ")
-		d, z, h, m, s, str, err := readUnitString()
+		morphUnits, str, err := readUnitString()
 		if err != nil {
 			return err
 		}
 		if str == "x" {
-			continue
+			return nil
 		}
 
-		costMinerals := d*units["Drone"].minerals +
-			z*units["Zergling"].minerals +
-			h*units["Hydralisk"].minerals +
-			m*units["Mutalisk"].minerals +
-			s*units["Spore Crawler"].minerals
-		costGas := d*units["Drone"].gas +
-			z*units["Zergling"].gas +
-			h*units["Hydralisk"].gas +
-			m*units["Mutalisk"].gas +
-			s*units["Spore Crawler"].gas
+		costMinerals, costGas := 0, 0
+		for name, count := range morphUnits {
+			costMinerals += count * units[name].minerals
+			costGas += count * units[name].gas
+		}
 
 		if costMinerals > player.minerals || costGas > player.gas {
 			fmt.Println("Insufficient funds!")
 			continue
 		}
 
-		player.drones += d
-		player.zerglings += z
-		player.hydralisks += h
-		player.mutalisks += m
-		player.sporeCrawlers += s
+		for name, count := range morphUnits {
+			player.units[name] += count
+		}
 
 		player.minerals -= costMinerals
 		player.gas -= costGas
-		fmt.Printf("Morphing units...\n")
-		fmt.Printf("DEBUG: Morph(%d, %d, %d, %d, %d)\n", d, z, h, m, s)
-		fmt.Printf("DEBUG: Total(%d, %d, %d, %d, %d)\n", player.drones, player.zerglings, player.hydralisks, player.mutalisks, player.sporeCrawlers)
-
-		fmt.Println()
-		return nil
 	}
 }
 
-func stepAttack(player *PlayerData, playerCount int) (*AttackData, error) {
-	if player.zerglings == 0 && player.hydralisks == 0 && player.mutalisks == 0 {
+func stepAttack(player *PlayerData, playerCount int, units map[string]UnitData) (*AttackData, error) {
+	if player.units[Zergling] == 0 && player.units[Hydralisk] == 0 && player.units[Mutalisk] == 0 {
 		return nil, nil
 	}
 
-	subStepPrintAttackUnits(player)
+	subStepPrintAttackUnits(player, units)
 
-	z, h, m, err := subStepSelectAttackUnits(player)
+	attackUnits, err := subStepSelectAttackUnits(player)
 	if err != nil {
 		return nil, fmt.Errorf("failed to select units: %v", err)
 	}
@@ -195,9 +215,7 @@ func stepAttack(player *PlayerData, playerCount int) (*AttackData, error) {
 	attack := AttackData{
 		attackerID: player.ID,
 		defenderID: targetPlayer,
-		zerglings:  z,
-		hydralisks: h,
-		mutalisks:  m,
+		units:      attackUnits,
 	}
 
 	fmt.Println()
@@ -286,38 +304,33 @@ func subStepPrintAffordableUnits(player *PlayerData, units map[string]UnitData) 
 	return true
 }
 
-func subStepPrintAttackUnits(player *PlayerData) {
+func subStepPrintAttackUnits(player *PlayerData, units map[string]UnitData) {
 	fmt.Println("Available offensive units:")
 
-	if player.zerglings == 1 {
-		fmt.Printf("\t%d zergling\n", player.zerglings)
-	} else if player.zerglings > 1 {
-		fmt.Printf("\t%d zerglings\n", player.zerglings)
-	}
+	nonAttackUnits := map[string]struct{}{Drone: {}, SporeCrawler: {}}
+	for key, count := range player.units {
+		if _, contains := nonAttackUnits[key]; contains {
+			continue
+		}
 
-	if player.hydralisks == 1 {
-		fmt.Printf("\t%d hydralisk\n", player.hydralisks)
-	} else if player.hydralisks > 1 {
-		fmt.Printf("\t%d hydralisks\n", player.hydralisks)
-	}
-
-	if player.mutalisks == 1 {
-		fmt.Printf("\t%d mutalisk\n", player.mutalisks)
-	} else if player.mutalisks > 1 {
-		fmt.Printf("\t%d mutalisks\n", player.mutalisks)
+		if count == 1 {
+			fmt.Printf("\t%d %s\n", count, units[key].name)
+		} else if count > 1 {
+			fmt.Printf("\t%d %ss\n", count, units[key].name)
+		}
 	}
 }
 
-func subStepSelectAttackUnits(player *PlayerData) (int, int, int, error) {
+func subStepSelectAttackUnits(player *PlayerData) (map[string]int, error) {
 	fmt.Printf("\nAttack with (format: 'zzh')? ")
-	_, z, h, m, _, _, err := readUnitString()
+	units, _, err := readUnitString()
 	if err != nil {
-		return 0, 0, 0, err
+		return nil, err
 	}
-	z = zutil.Min(z, player.zerglings)
-	h = zutil.Min(h, player.hydralisks)
-	m = zutil.Min(m, player.mutalisks)
-	return z, h, m, nil
+	for name := range units {
+		units[name] = zutil.Min(units[name], player.units[name])
+	}
+	return units, nil
 }
 
 func subStepSelectAttackTarget(playerCount, selfID int) int {
@@ -337,29 +350,35 @@ func subStepSelectAttackTarget(playerCount, selfID int) int {
 	return targetPlayer
 }
 
-func readUnitString() (int, int, int, int, int, string, error) {
+func readUnitString() (map[string]int, string, error) {
 	var unitStr string
 	if _, err := fmt.Scan(&unitStr); err != nil {
-		return 0, 0, 0, 0, 0, "", fmt.Errorf("could not read input: %v", err)
+		return nil, "", fmt.Errorf("could not read input: %v", err)
 	}
 
-	d, z, h, m, s := 0, 0, 0, 0, 0
+	units := map[string]int{
+		Drone:        0,
+		Zergling:     0,
+		Hydralisk:    0,
+		Mutalisk:     0,
+		SporeCrawler: 0,
+	}
 	for _, unitRune := range strings.ToLower(unitStr) {
 		switch unitRune {
 		case 'd':
-			d++
+			units[Drone]++
 		case 'z':
-			z++
+			units[Zergling]++
 		case 'h':
-			h++
+			units[Hydralisk]++
 		case 'm':
-			m++
+			units[Mutalisk]++
 		case 's':
-			s++
+			units[SporeCrawler]++
 		}
 	}
 
-	return d, z, h, m, s, unitStr, nil
+	return units, unitStr, nil
 }
 
 func main() {
